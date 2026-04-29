@@ -4,21 +4,39 @@ import { Calculator, Globe, ArrowRight } from 'lucide-react';
 const PriceCalculator = ({ approvalResults, exchangeRate, setExchangeRate }) => {
   const [liveRates, setLiveRates] = useState(null);
   const [isLoadingRates, setIsLoadingRates] = useState(false);
+  const [ratesError, setRatesError] = useState(null);
 
-  // 실시간 환율 가져오기 (Dunamu API 활용 - 키 불필요)
+  // 실시간 환율 가져오기 (ExchangeRate-API 적용)
   const fetchRates = async () => {
     setIsLoadingRates(true);
+    setRatesError(null);
     try {
-      const response = await fetch('https://quotation-api-cdn.dunamu.com/v1/forex/recent?codes=FRX.KRWUSD,FRX.KRWJPY,FRX.KRWCNY');
-      const data = await response.json();
-      setLiveRates(data);
-      // 기본적으로 달러 송금 환율을 초기값으로 제안 (선택사항)
-      const usdRate = data.find(r => r.currencyCode === 'USD');
-      if (usdRate && exchangeRate === 1350) {
-        setExchangeRate(usdRate.basePrice + 14); // 대략적인 송금 환율
+      const response = await fetch('https://v6.exchangerate-api.com/v6/604d2abf1ac8bdf5191506d1/latest/USD');
+      const apiData = await response.json();
+      
+      if (apiData.result === 'success') {
+        const rates = apiData.conversion_rates;
+        const krw = rates.KRW;
+        
+        // 기존 UI와 호환되도록 데이터 구조 변환 (JPY는 100엔 기준)
+        const data = [
+          { currencyCode: 'USD', basePrice: Math.round(krw * 100) / 100 },
+          { currencyCode: 'JPY', basePrice: Math.round((krw / rates.JPY * 100) * 100) / 100 },
+          { currencyCode: 'CNY', basePrice: Math.round((krw / rates.CNY) * 100) / 100 }
+        ];
+
+        setLiveRates(data);
+        // 기본적으로 달러 송금 환율을 초기값으로 제안 (선택사항)
+        const usdRate = data.find(r => r.currencyCode === 'USD');
+        if (usdRate && exchangeRate === 1350) {
+          setExchangeRate(usdRate.basePrice + 14.5); // 대략적인 송금 환율 가산 (USD 기준)
+        }
+      } else {
+        throw new Error(apiData['error-type'] || "API 반환 오류");
       }
     } catch (err) {
       console.error("환율 로드 실패:", err);
+      setRatesError(err.message);
     } finally {
       setIsLoadingRates(false);
     }
@@ -66,6 +84,8 @@ const PriceCalculator = ({ approvalResults, exchangeRate, setExchangeRate }) => 
                 </div>
               ))}
             </div>
+          ) : ratesError ? (
+            <div className="text-xs text-red-400 px-4">환율 로드 실패: {ratesError}</div>
           ) : (
             <div className="text-xs text-muted animate-pulse px-10">환율 정보 로드 중...</div>
           )}
