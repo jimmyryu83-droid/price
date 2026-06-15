@@ -69,3 +69,65 @@ export async function searchInDB(table, query, limit = 50) {
     .limit(limit)
     .toArray();
 }
+
+export async function getDashboardStats() {
+  const history = await db.history.toArray();
+
+  console.log(history[0]);
+
+  if (history.length === 0) {
+    return {
+      avgSellingPrice: 0,
+      avgMargin: 0,
+      topCustomer: '-',
+    };
+  }
+
+  let totalSellingPrice = 0;
+  let marginSum = 0;
+  let marginCount = 0;
+
+  const customerMap = {};
+
+  history.forEach((item) => {
+    const selling = Number(
+    String(item.colK || 0).replace(/,/g, '')
+    );   // 판매가
+    const cost = Number(item.colT || 0);      // 매입단가
+
+    totalSellingPrice += selling;
+
+    if (selling > 0 && cost > 0) {
+      const margin = ((selling - cost) / selling) * 100;
+
+      // 이상치 제거
+      if (margin >= -100 && margin <= 100) {
+          marginSum += margin;
+          marginCount++;
+      }
+    }
+
+    const customer = item.colD || '기타';
+
+    customerMap[customer] =
+      (customerMap[customer] || 0) + selling;
+  });
+
+  const avgSellingPrice =
+    totalSellingPrice / history.length;
+
+  const avgMargin =
+    marginCount > 0
+      ? marginSum / marginCount
+      : 0;
+
+  const topCustomer =
+    Object.entries(customerMap)
+      .sort((a, b) => b[1] - a[1])[0]?.[0] || '-';
+
+  return {
+    avgSellingPrice,
+    avgMargin,
+    topCustomer,
+  };
+}

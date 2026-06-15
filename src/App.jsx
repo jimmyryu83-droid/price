@@ -1,10 +1,12 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+
 import ExcelUploader from './components/ExcelUploader';
 import PriceResults from './components/PriceResults';
 import PriceCalculator from './components/PriceCalculator';
+
 import { Search, Database, FileSpreadsheet, Activity } from 'lucide-react';
 
-import { db, saveParsedData, loadInitialStatus, searchInDB } from './db';
+import { saveParsedData, loadInitialStatus, searchInDB } from './db';
 
 /**
  * Price Checker Pro - 고성능 DB 직접 검색 아키텍처
@@ -20,7 +22,109 @@ function App() {
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [isDBLoading, setIsDBLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
-  const [exchangeRate, setExchangeRate] = useState(1350); // 기본 환율 설정
+  const [exchangeRate, setExchangeRate] = useState(1500); // 기본 환율 설정
+    const partAnalysis = useMemo(() => {
+    if (filteredHistory.length === 0) return null;
+
+    const validSelling = filteredHistory
+      .map(item => Number(item.colJ || 0))
+      .filter(v => v > 0);
+
+    const avgSelling =
+      validSelling.length > 0
+        ? validSelling.reduce((a, b) => a + b, 0) / validSelling.length
+        : 0;
+    
+    let marginSum = 0;
+    let marginCount = 0;
+
+    filteredHistory.forEach(item => {
+      const selling = Number(item.colJ || 0);
+      const cost = Number(item.colT || 0);
+
+      if (selling > 0 && cost > 0) {
+        const margin = ((selling - cost) / selling) * 100;
+
+        // 이상치 제거
+        if (margin >= -100 && margin <= 100) {
+          marginSum += margin;
+          marginCount++;
+        }
+      }
+    });
+
+    const avgMargin =
+      marginCount > 0
+        ? marginSum / marginCount
+        : 0;
+
+
+    const customerMap = {};
+
+    filteredHistory.forEach(item => {
+      const customer = item.colD || '기타';
+
+      customerMap[customer] =
+        (customerMap[customer] || 0) + 1;
+    });
+
+    const topCustomer =
+      Object.entries(customerMap)
+        .sort((a, b) => b[1] - a[1])[0]?.[0] || '-';
+
+    const sortedHistory = [...filteredHistory].sort((a, b) => {
+      const yearA = Number(a.colA || 0);
+      const yearB = Number(b.colA || 0);
+
+      if (yearA !== yearB) return yearB - yearA;
+
+      return Number(b.colB || 0) - Number(a.colB || 0);
+    });
+
+    const latest = sortedHistory[0];
+
+    return {
+      count: filteredHistory.length,
+      avgSelling,
+      avgMargin,
+      topCustomer,
+      latest:
+        latest
+          ? `${latest.colA} ${latest.colB}`
+          : '-'
+    };
+  }, [filteredHistory]);
+
+        const yearlyTrend = useMemo(() => {
+          if (filteredHistory.length === 0) return [];
+
+          const trendMap = {};
+
+          filteredHistory.forEach(item => {
+            const year = item.colA;
+            const selling = Number(item.colJ || 0);
+
+            if (!year || selling <= 0) return;
+
+            if (!trendMap[year]) {
+              trendMap[year] = [];
+            }
+
+            trendMap[year].push(selling);
+          });
+
+          return Object.entries(trendMap)
+            .map(([year, prices]) => ({
+              year,
+              avg:
+                prices.reduce((sum, p) => sum + p, 0) /
+                prices.length
+            }))
+            .sort((a, b) => Number(a.year) - Number(b.year));
+
+        }, [filteredHistory]);
+      const maxTrend =
+        Math.max(...yearlyTrend.map(item => item.avg), 1);
 
   // 2. 검색 디바운싱 (입력 중 멈춤 방지)
   useEffect(() => {
@@ -34,8 +138,7 @@ function App() {
   // 3. 초기 상태 로드 (데이터 본문이 아닌 건수와 정보만 로드)
   useEffect(() => {
     let isMounted = true;
-    
-    // 타임아웃: 5초 이상 로딩되면 강제 중단
+
     const timeout = setTimeout(() => {
       if (isMounted && isDBLoading) {
         console.warn("DB 로딩 타임아웃 발생");
@@ -45,14 +148,21 @@ function App() {
 
     async function init() {
       try {
-        const { metadata, approvalCount, historyCount } = await loadInitialStatus();
+        const {
+          metadata,
+          approvalCount,
+          historyCount
+        } = await loadInitialStatus();
+
         if (isMounted) {
           setMetadata(metadata);
           setApprovalCount(approvalCount);
           setHistoryCount(historyCount);
         }
+
       } catch (err) {
         console.error("초기 로딩 오류:", err);
+
       } finally {
         if (isMounted) {
           setIsDBLoading(false);
@@ -60,11 +170,14 @@ function App() {
         }
       }
     }
+
     init();
+
     return () => {
       isMounted = false;
       clearTimeout(timeout);
     };
+
   }, []);
 
   // 4. DB 직접 검색 수행 (성능 최적화의 핵심)
@@ -98,7 +211,7 @@ function App() {
   const handleDataParsed = async (type, data, fileName, headers = null) => {
     try {
       await saveParsedData(type, data, fileName, headers);
-      
+
       // 화면에 즉시 카운트 반영
       if (type === 'approval') setApprovalCount(data.length);
       else setHistoryCount(data.length);
@@ -136,9 +249,9 @@ function App() {
           <Activity className="text-primary" size={32} />
           <h1 className="text-4xl font-extrabold tracking-tight">Price Checker Pro</h1>
         </div>
-        <p className="text-muted text-lg">고성능 DB 직접 검색 시스템</p>
+        <p className="text-muted text-lg">판매이력 데이터 분석 기반 견적 의사결정 지원 시스템</p>
       </header>
-
+   
       {/* 업로드 섹션 */}
       <section className="upload-grid">
         <ExcelUploader 
@@ -184,6 +297,82 @@ function App() {
             />
           </div>
         </div>
+
+        {partAnalysis && (
+          <div className="glass-card mb-6">
+            <h3 className="text-xl font-bold mb-4">
+              🔍 품목 분석
+            </h3>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+
+              <div>
+                <p className="text-sm text-gray-400">거래건수</p>
+                <p className="text-2xl font-bold">
+                  {partAnalysis.count}건
+                </p>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-400">평균 판매가</p>
+                <p className="text-2xl font-bold">
+                  ₩{Math.round(
+                    partAnalysis.avgSelling
+                  ).toLocaleString()}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-400">평균 마진율</p>
+                <p className="text-2xl font-bold">
+                  {partAnalysis.avgMargin.toFixed(1)}%
+                </p>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-400">최근 거래</p>
+                <p className="text-2xl font-bold">
+                  {partAnalysis.latest}
+                </p>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+          {yearlyTrend.length > 0 && (
+            <div className="glass-card mb-6">
+              <h3 className="text-xl font-bold mb-4">
+                📈 판매단가 추이
+              </h3>
+
+              {yearlyTrend.map(item => (
+                <div
+                  key={item.year}
+                  className="flex items-center gap-4 mb-3"
+                >
+                  <span className="w-14 font-semibold">
+                    {item.year}
+                  </span>
+
+                  <div className="flex-1 bg-slate-700 rounded-full h-4 overflow-hidden">
+                    <div
+                        style={{
+                        width: `${(item.avg / maxTrend) * 100}%`,
+                        height: "16px",
+                        backgroundColor: "#22d3ee",
+                        borderRadius: "9999px"
+                      }}
+                    />
+                  </div>
+
+                  <span className="w-28 text-right">
+                    ₩{Math.round(item.avg).toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
 
         <PriceResults 
           approvalResults={filteredApproval} 
