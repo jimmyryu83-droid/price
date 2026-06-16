@@ -6,7 +6,7 @@ import PriceCalculator from './components/PriceCalculator';
 
 import { Search, Database, FileSpreadsheet, Activity } from 'lucide-react';
 
-import { saveParsedData, loadInitialStatus, searchInDB } from './db';
+import { saveParsedData, loadInitialStatus, searchInDB, clearTable } from './db';
 
 /**
  * Price Checker Pro - 고성능 DB 직접 검색 아키텍처
@@ -23,6 +23,7 @@ function App() {
   const [isDBLoading, setIsDBLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(1500); // 기본 환율 설정
+  const [isAdmin, setIsAdmin] = useState(false);
     const partAnalysis = useMemo(() => {
     if (filteredHistory.length === 0) return null;
 
@@ -208,6 +209,33 @@ function App() {
   }, [debouncedSearchQuery]);
 
   // 5. 데이터 업데이트 및 저장
+  const handleDelete = async (type) => {
+      const ok = window.confirm(
+        `${type === 'approval'
+          ? '승인단가'
+          : '판매이력'} 데이터를 삭제하시겠습니까?`
+      );
+
+      if (!ok) return;
+
+      await clearTable(type);
+
+      if (type === 'approval') {
+        setApprovalCount(0);
+      } else {
+        setHistoryCount(0);
+      }
+
+      setMetadata(prev => {
+        const copy = { ...prev };
+        delete copy[type];
+        return copy;
+      });
+
+      alert('삭제되었습니다.');
+    };
+  
+  
   const handleDataParsed = async (type, data, fileName, headers = null) => {
     try {
       await saveParsedData(type, data, fileName, headers);
@@ -224,7 +252,8 @@ function App() {
           headers: headers || prev[type]?.headers 
         }
       }));
-
+    
+    
       // 현재 검색어가 있다면 검색 결과도 갱신
       if (debouncedSearchQuery) {
           const newRes = await searchInDB(type, debouncedSearchQuery, type === 'approval' ? 50 : 500);
@@ -250,23 +279,45 @@ function App() {
           <h1 className="text-4xl font-extrabold tracking-tight">Price Checker Pro</h1>
         </div>
         <p className="text-muted text-lg">판매이력 데이터 분석 기반 견적 의사결정 지원 시스템</p>
+  
+        <button
+          className="admin-btn"
+          onClick={() => {
+            const pw = prompt("관리자 비밀번호를 입력하세요.");
+
+            if (pw === "snl2025") {
+              setIsAdmin(true);
+              alert("관리자 모드 활성화");
+            } else {
+              alert("비밀번호가 올바르지 않습니다.");
+            }
+          }}
+        >
+          {isAdmin ? "🔓 관리자" : "🔒 관리자"}
+        </button>
+  
       </header>
    
       {/* 업로드 섹션 */}
-      <section className="upload-grid">
-        <ExcelUploader 
-          type="approval" 
-          label="1. 승인단가 (원가기준)" 
-          lastUpdateInfo={metadata.approval}
-          onDataParsed={(data, fileName) => handleDataParsed('approval', data, fileName)} 
-        />
-        <ExcelUploader 
-          type="history" 
-          label="2. 판매이력 (기존거래)" 
-          lastUpdateInfo={metadata.history}
-          onDataParsed={(data, fileName) => handleDataParsed('history', data, fileName)} 
-        />
-      </section>
+      
+      {isAdmin && (
+        <section className="upload-grid">
+          <ExcelUploader 
+            type="approval" 
+            label="1. 승인단가 (원가기준)" 
+            lastUpdateInfo={metadata.approval}
+            onDataParsed={(data, fileName) => handleDataParsed('approval', data, fileName)}
+            onDelete={handleDelete} 
+          />
+          <ExcelUploader 
+            type="history" 
+            label="2. 판매이력 (기존거래)" 
+            lastUpdateInfo={metadata.history}
+            onDataParsed={(data, fileName) => handleDataParsed('history', data, fileName)}
+            onDelete={handleDelete} 
+          />
+        </section>
+      )}
 
       {/* 단가 시뮬레이션 섹션 (신규) */}
       <PriceCalculator 

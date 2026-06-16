@@ -5,7 +5,7 @@ import { Upload, FileCheck, AlertCircle, Info, Tag } from 'lucide-react';
 /**
  * 엑셀 업로드 컴포넌트 (지능형 파싱 및 디버깅 UI 포함)
  */
-const ExcelUploader = ({ type, onDataParsed, label, lastUpdateInfo }) => {
+const ExcelUploader = ({ type, onDataParsed, label, lastUpdateInfo, onDelete }) => {
   const [fileName, setFileName] = useState(lastUpdateInfo?.fileName || '');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -182,19 +182,45 @@ const ExcelUploader = ({ type, onDataParsed, label, lastUpdateInfo }) => {
   return (
     <div className={`glass-card uploader-container overflow-hidden ${error ? 'border-red-500/50' : ''}`}>
       <div className="flex items-center justify-between mb-4">
+
         <div>
           <h3 className="text-lg font-bold flex items-center gap-2">
             {label}
+
             {lastUpdateInfo?.uploadDate && (
               <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-muted font-normal">
                 {lastUpdateInfo.uploadDate} 업데이트됨
               </span>
             )}
           </h3>
-          {fileName && <span className="text-xs text-blue-400 font-mono italic">{fileName}</span>}
+
+          {fileName && (
+            <span className="text-xs text-blue-400 font-mono italic">
+              {fileName}
+            </span>
+          )}
         </div>
-      </div>
-      
+
+        {/* 삭제 버튼 */}
+        {onDelete && (
+          <button
+            onClick={() => onDelete(type)}
+            className="
+              px-3 py-1
+              text-xs
+              rounded-lg
+              bg-red-500/20
+              text-red-300
+              hover:bg-red-500/30
+              transition
+            "
+          >
+            삭제
+          </button>
+        )}
+
+      </div>      
+            
       <label className={`upload-zone group ${isLoading ? 'loading pointer-events-none' : ''}`}>
         <input 
           type="file" 

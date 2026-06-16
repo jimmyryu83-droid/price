@@ -125,9 +125,19 @@ export async function getDashboardStats() {
     Object.entries(customerMap)
       .sort((a, b) => b[1] - a[1])[0]?.[0] || '-';
 
-  return {
-    avgSellingPrice,
-    avgMargin,
-    topCustomer,
-  };
+    return {
+      avgSellingPrice,
+      avgMargin,
+      topCustomer,
+    };
+  }
+  export async function clearTable(type) {
+    if (type === 'approval') {
+      await db.approval.clear();
+    } else {
+      await db.history.clear();
+    }
+
+    await db.metadata.delete(type);
+
 }
